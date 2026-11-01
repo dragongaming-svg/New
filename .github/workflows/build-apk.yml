@@ -4,49 +4,55 @@ name: Build QuickTap APK
 on:
   workflow_dispatch:
   push:
-    paths:
-      - '*.zip'
-      - '.github/workflows/**'
+    branches:
+      - main
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install SDK
+      - name: Install Android SDK
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Extract ZIP
         run: |
-          ZIP_FILE=$(find . -maxdepth 1 -name '*.zip' | head -1)
-          test -n "$ZIP_FILE"
-          unzip -o "$ZIP_FILE" -d source
+          mkdir source
+          unzip -o QuickTapShortcut-Android-Source.zip -d source
 
-      - name: Set up Gradle
+      - name: Find project folder
+        run: |
+          PROJECT=$(find source -name settings.gradle -printf '%h\n' | head -1)
+          test -n "$PROJECT"
+          echo "PROJECT_DIR=$PROJECT" >> $GITHUB_ENV
+
+      - name: Setup Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
       - name: Build APK
-        run: |
-          cd source/QuickTapShortcut
-          gradle --no-daemon assembleDebug
+        run: gradle --no-daemon assembleDebug
+        working-directory: ${{ env.PROJECT_DIR }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: QuickTapShortcut-APK
-          path: source/QuickTapShortcut/app/build/outputs/apk/debug/*.apk
-          
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
